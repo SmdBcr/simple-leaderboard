@@ -1,4 +1,4 @@
-package com.gjg.leaderboard;
+package com.gjg.leaderboard.impl;
 
 
 import org.springframework.http.HttpStatus;

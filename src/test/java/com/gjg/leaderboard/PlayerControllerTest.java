@@ -1,5 +1,9 @@
 package com.gjg.leaderboard;
 
+import com.gjg.leaderboard.pojo.Player;
+import com.gjg.leaderboard.pojo.PlayerItem;
+import com.gjg.leaderboard.request.PlayerCreationRequestBody;
+import com.gjg.leaderboard.request.ScoreSubmissionRequestBody;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

@@ -1,4 +1,4 @@
-package com.gjg.leaderboard;
+package com.gjg.leaderboard.pojo;
 
 
 import lombok.Data;

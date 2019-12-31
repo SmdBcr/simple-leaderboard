@@ -17,16 +17,18 @@ import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededExce
 import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.javafaker.Faker;
+import com.gjg.leaderboard.pojo.Player;
+import com.gjg.leaderboard.pojo.PlayerItem;
+import com.gjg.leaderboard.request.PlayerCreationRequestBody;
+import com.gjg.leaderboard.request.ScoreSubmissionRequestBody;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import redis.clients.jedis.Jedis;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @RestController
 public class PlayerController {
@@ -161,6 +163,32 @@ public class PlayerController {
         PlayerItem playerItem = new PlayerItem(playerCreationRequestBody.getDisplayName(), playerCreationRequestBody.getCountry());
         dynamoDBMapper.save(playerItem);
         jedis.zadd(redisTableKey, 0, playerItem.getUserUuid());
+        return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
+    }
+
+    /**
+     * Fake New Player Creation for testing
+     * @return PlayerItem
+     */
+    @GetMapping("/user/createrandom")
+    PlayerItem createRandomPlayerWithScores() {
+        Faker faker = new Faker();
+        Random random = new Random();
+
+        int randomPoint = random.nextInt(10000) + 1;
+        PlayerItem playerItem;
+
+        if (randomPoint % 3 == 1) {
+            playerItem = new PlayerItem(faker.firstName(), "tr", randomPoint);
+        }else if (randomPoint % 3 == 2) {
+            playerItem = new PlayerItem(faker.firstName(), "uk", randomPoint);
+        } else {
+            playerItem = new PlayerItem(faker.firstName(), "us", randomPoint);
+        }
+
+        dynamoDBMapper.save(playerItem);
+        jedis.zadd(redisTableKey, randomPoint, playerItem.getUserUuid());
+
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 

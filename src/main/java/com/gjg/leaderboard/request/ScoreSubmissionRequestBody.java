@@ -1,4 +1,4 @@
-package com.gjg.leaderboard;
+package com.gjg.leaderboard.request;
 
 import javax.persistence.Entity;
 import javax.persistence.Id;

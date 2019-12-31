@@ -1,4 +1,4 @@
-package com.gjg.leaderboard;
+package com.gjg.leaderboard.request;
 
 
 import lombok.Data;
@@ -9,7 +9,7 @@ public class PlayerCreationRequestBody {
     private String displayName;
     private String country;
 
-    PlayerCreationRequestBody(String displayName, String country) {
+    public PlayerCreationRequestBody(String displayName, String country) {
 
         if (displayName == null || displayName.length() == 0 ||
                 country == null || country.length() == 0)

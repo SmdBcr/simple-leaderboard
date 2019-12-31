@@ -1,4 +1,4 @@
-package com.gjg.leaderboard;
+package com.gjg.leaderboard.pojo;
 
 
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBAttribute;
@@ -32,6 +32,19 @@ public class PlayerItem {
         this.displayName = displayName;
         this.country = country;
         this.points = 0;
+    }
+
+    public PlayerItem(String displayName, String country, double points) {
+
+        if (displayName == null || displayName.length() == 0 ||
+                country == null || country.length() == 0 ||
+                points < 0)
+            throw new IllegalArgumentException("Invalid name or country.");
+
+        this.userUuid = UUID.randomUUID();
+        this.displayName = displayName;
+        this.country = country;
+        this.points = points;
     }
 
     @DynamoDBHashKey(attributeName = "userUuid")
