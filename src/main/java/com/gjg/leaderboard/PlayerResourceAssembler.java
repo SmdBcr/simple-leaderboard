@@ -1,3 +1,4 @@
+/*
 package com.gjg.leaderboard;
 
 
@@ -15,7 +16,7 @@ class PlayerResourceAssembler implements RepresentationModelAssembler<Player, En
     public EntityModel<Player> toModel(Player player) {
 
         return new EntityModel<>(player,
-                linkTo(methodOn(PlayerController.class).getPlayer(player.getUuid())).withSelfRel(),
+                linkTo(methodOn(PlayerController.class).getPlayer(player.getUserUuid())).withSelfRel(),
                 linkTo(methodOn(PlayerController.class).globalLeaderboard()).withRel("players"));
     }
-}
+}*/

@@ -1,39 +1,54 @@
 package com.gjg.leaderboard;
 
-import lombok.Data;
 
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import java.util.UUID;
 
 
-@Data
 @Entity
 public class Player {
-    //private @Id @GeneratedValue Long id;
-    private String name;
+
+    private @Id /*@Transient*/ UUID userUuid = UUID.randomUUID();
+    private String displayName;
+    private int points;
+    private long rank;
     private String country;
-    private @Id /*@Transient*/ UUID uuid = UUID.randomUUID();
     Player() {}
 
-    public Player(String name, String country) {
-        this.name = name;
+    public Player(String displayName, String country) {
+        this.displayName = displayName;
         this.country = country;
     }
 
-    public Player(UUID uuid, String name, String country) {
-        this.uuid = uuid;
-        this.name = name;
+    public Player(UUID userUuid, String displayName, String country) {
+        this.userUuid = userUuid;
+        this.displayName = displayName;
         this.country = country;
     }
 
-
-    public String getName() {
-        return name;
+    public Player(UUID userUuid, String displayName, String country, int points) {
+        this.userUuid = userUuid;
+        this.displayName = displayName;
+        this.country = country;
+        this.points = points;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public Player(UUID userUuid, String displayName, String country, int points, long rank) {
+        this.userUuid = userUuid;
+        this.displayName = displayName;
+        this.country = country;
+        this.points = points;
+        this.rank = rank;
+    }
+
+
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
     }
 
     public String getCountry() {
@@ -44,14 +59,29 @@ public class Player {
         this.country = country;
     }
 
-    public UUID getUuid() {
-        return uuid;
+    public UUID getUserUuid() {
+        return userUuid;
     }
 
-    public void setUuid(UUID uuid) {
-        this.uuid = uuid;
+    public void setUserUuid(UUID userUuid) {
+        this.userUuid = userUuid;
     }
 
+    public int getPoints() {
+        return points;
+    }
+
+    public void setPoints(int points) {
+        this.points = points;
+    }
+
+    public long getRank() {
+        return rank;
+    }
+
+    public void setRank(long rank) {
+        this.rank = rank;
+    }
 }
 
 

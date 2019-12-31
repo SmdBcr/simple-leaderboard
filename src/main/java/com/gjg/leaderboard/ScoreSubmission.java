@@ -1,13 +1,10 @@
 package com.gjg.leaderboard;
 
-import lombok.Data;
-
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import java.util.UUID;
 
 
-@Data
 @Entity
 public class ScoreSubmission {
     private @Id UUID uuid ;
