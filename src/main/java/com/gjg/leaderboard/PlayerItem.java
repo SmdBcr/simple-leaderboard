@@ -4,7 +4,6 @@ package com.gjg.leaderboard;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBAttribute;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBHashKey;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBTable;
-import com.amazonaws.services.pi.model.InvalidArgumentException;
 
 import javax.persistence.Id;
 import java.util.UUID;
@@ -42,13 +41,13 @@ public class PlayerItem {
 
     public void setUserUuid(UUID userUuid) {
         if (userUuid == null)
-            throw new InvalidArgumentException("Invalid uuid.");
+            throw new IllegalArgumentException("Invalid uuid.");
         this.userUuid = userUuid;
     }
 
     public void setUserUuid(String userUuid) {
         if (userUuid == null || userUuid.length() == 0)
-            throw new InvalidArgumentException("Invalid uuid.");
+            throw new IllegalArgumentException("Invalid uuid.");
         this.userUuid = UUID.fromString(userUuid);
     }
 

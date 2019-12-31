@@ -1,7 +1,5 @@
 package com.gjg.leaderboard;
 
-import com.amazonaws.services.pi.model.InvalidArgumentException;
-
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import java.util.UUID;
@@ -20,7 +18,7 @@ public class ScoreSubmissionRequestBody {
     public ScoreSubmissionRequestBody(UUID uuid, double scoreWorth) {
 
         if (uuid == null || scoreWorth <= 0)
-            throw new InvalidArgumentException("Invalid score submission");
+            throw new IllegalArgumentException("Invalid score submission");
 
         this.uuid = uuid;
         this.scoreWorth = scoreWorth;

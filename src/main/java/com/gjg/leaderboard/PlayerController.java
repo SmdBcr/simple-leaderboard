@@ -15,7 +15,6 @@ import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.InternalServerErrorException;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException;
 import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
-import com.amazonaws.services.pi.model.InvalidArgumentException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONObject;
@@ -63,24 +62,30 @@ public class PlayerController {
         this.leaderboardTable = dynamoDB.getTable(dynamoDbTableName);
     }
 
-    /**
-     * @param page the number of page for pagination
-     * @return List of players in the current page
-     */
-    @GetMapping("/leaderboard")
-    List<Player> getGlobalLeaderboard(@RequestBody int page) {
-
-        if (page <= 0) throw new InvalidArgumentException("Invalid page number.");
-
-        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, (page - 1) * 10, page * 10 - 1);
-        List<Player> pageList = new ArrayList<>();
-
-        for (String uuid : pageUUIDs) {
-            pageList.add(getPlayer(uuid));
+    private static void handleCommonErrors(Exception exception) {
+        try {
+            throw exception;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Invalid Argument Error: " + e.getMessage());
+        } catch (InternalServerErrorException isee) {
+            System.out.println("Internal Server Error, generally safe to retry with exponential back-off. Error: " + isee.getErrorMessage());
+        } catch (ProvisionedThroughputExceededException ptee) {
+            System.out.println("Request rate is too high. If you're using a custom retry strategy make sure to retry with exponential back-off. " +
+                    "Otherwise consider reducing frequency of requests or increasing provisioned capacity for your table or secondary index. Error: " +
+                    ptee.getErrorMessage());
+        } catch (ResourceNotFoundException rnfe) {
+            System.out.println("One of the tables was not found, verify table exists before retrying. Error: " + rnfe.getErrorMessage());
+        } catch (AmazonServiceException ase) {
+            System.out.println("An AmazonServiceException occurred, indicates that the request was correctly transmitted to the DynamoDB " +
+                    "service, but for some reason, the service was not able to process it, and returned an error response instead. Investigate and " +
+                    "configure retry strategy. Error type: " + ase.getErrorType() + ". Error message: " + ase.getErrorMessage());
+        } catch (AmazonClientException ace) {
+            System.out.println("An AmazonClientException occurred, indicates that the client was unable to get a response from DynamoDB " +
+                    "service, or the client was unable to parse the response from the service. Investigate and configure retry strategy. " +
+                    "Error: " + ace.getMessage());
+        } catch (Exception e) {
+            System.out.println("An exception occurred, investigate and configure retry strategy. Error: " + e.getMessage());
         }
-
-        return pageList;
-
     }
 
     /**
@@ -127,11 +132,31 @@ public class PlayerController {
     }
 
     /**
+     * @param page the number of page for pagination
+     * @return List of players in the current page
+     */
+    @GetMapping("/leaderboard")
+    List<Player> getGlobalLeaderboard(@RequestBody int page) {
+
+        if (page <= 0) throw new IllegalArgumentException("Invalid page number.");
+
+        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, (page - 1) * 10, page * 10 - 1);
+        List<Player> pageList = new ArrayList<>();
+
+        for (String uuid : pageUUIDs) {
+            pageList.add(getPlayer(uuid));
+        }
+
+        return pageList;
+
+    }
+
+    /**
      * Score Submission
      * @param scoreSubmissionRequestBody a json object with UUID and double parameter
      */
     @PostMapping("/score/submit")
-    ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws InvalidArgumentException {
+    ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws IllegalArgumentException {
 
         try {
 
@@ -149,7 +174,7 @@ public class PlayerController {
 
                 return scoreSubmissionRequestBody;
 
-            } else throw new InvalidArgumentException("Current score is already higher.");
+            } else throw new IllegalArgumentException("Current score is already higher.");
 
         } catch (Exception e) {
             handleQueryErrors(e);
@@ -157,33 +182,6 @@ public class PlayerController {
 
         return null;
 
-    }
-
-    /**
-     * Score Submission
-     * @param uuid UUID of the player
-     * @return Player
-     */
-    @GetMapping("/user/profile/{id}")
-    Player getPlayer(@PathVariable UUID uuid) {
-
-        if (uuid == null) throw new InvalidArgumentException("Invalid uuid.");
-
-        Player player = null;
-
-        try {
-            Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
-            JSONObject jsonItem = new JSONObject(item.toJSON());
-            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
-
-            player = objectMapper.readValue(jsonItem.toString(), Player.class);
-
-        } catch (JsonProcessingException | IllegalArgumentException e) {
-            // uuid string is wrong
-            e.printStackTrace();
-        }
-
-        return player;
     }
 
     /**
@@ -321,30 +319,31 @@ public class PlayerController {
         }
     }
 
-    private static void handleCommonErrors(Exception exception) {
+    /**
+     * Score Submission
+     * @param uuid UUID of the player
+     * @return Player
+     */
+    @GetMapping("/user/profile/{id}")
+    Player getPlayer(@PathVariable UUID uuid) {
+
+        if (uuid == null) throw new IllegalArgumentException("Invalid uuid.");
+
+        Player player = null;
+
         try {
-            throw exception;
-        } catch (InvalidArgumentException e) {
-            System.out.println("Invalid Argument Error: " + e.getErrorMessage());
-        } catch (InternalServerErrorException isee) {
-            System.out.println("Internal Server Error, generally safe to retry with exponential back-off. Error: " + isee.getErrorMessage());
-        } catch (ProvisionedThroughputExceededException ptee) {
-            System.out.println("Request rate is too high. If you're using a custom retry strategy make sure to retry with exponential back-off. " +
-                    "Otherwise consider reducing frequency of requests or increasing provisioned capacity for your table or secondary index. Error: " +
-                    ptee.getErrorMessage());
-        } catch (ResourceNotFoundException rnfe) {
-            System.out.println("One of the tables was not found, verify table exists before retrying. Error: " + rnfe.getErrorMessage());
-        } catch (AmazonServiceException ase) {
-            System.out.println("An AmazonServiceException occurred, indicates that the request was correctly transmitted to the DynamoDB " +
-                    "service, but for some reason, the service was not able to process it, and returned an error response instead. Investigate and " +
-                    "configure retry strategy. Error type: " + ase.getErrorType() + ". Error message: " + ase.getErrorMessage());
-        } catch (AmazonClientException ace) {
-            System.out.println("An AmazonClientException occurred, indicates that the client was unable to get a response from DynamoDB " +
-                    "service, or the client was unable to parse the response from the service. Investigate and configure retry strategy. " +
-                    "Error: " + ace.getMessage());
-        } catch (Exception e) {
-            System.out.println("An exception occurred, investigate and configure retry strategy. Error: " + e.getMessage());
+            Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
+            JSONObject jsonItem = new JSONObject(item.toJSON());
+            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
+
+            player = objectMapper.readValue(jsonItem.toString(), Player.class);
+
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            // uuid string is wrong
+            e.printStackTrace();
         }
+
+        return player;
     }
 
 }
