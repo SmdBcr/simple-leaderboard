@@ -5,7 +5,9 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
 import com.amazonaws.services.dynamodbv2.document.*;
 import com.amazonaws.services.dynamodbv2.document.spec.PutItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
@@ -36,24 +38,10 @@ class PlayerController {
     Jedis jedis;
     ObjectMapper objectMapper = new ObjectMapper();
     Table leaderboardTable;
-
-    @Value("${spring.redis.host}")
-    private String redisHost;
+    DynamoDBMapper dynamoDBMapper;
 
     @Value("${redis.table.key}")
     private String redisTableKey;
-
-    @Value("${aws.accessKey}")
-    private String awsAccessKey;
-
-    @Value("${aws.secretKey}")
-    private String awsSecretKey;
-
-    @Value("${aws.region}")
-    private String awsRegion;
-
-    @Value("${dynamodb.table.name}")
-    private String dynamoDbTableName;
 
     @Value("${dynamodb.primary.key}")
     private String dynamoDbHashKey;
@@ -61,20 +49,27 @@ class PlayerController {
     @Value("${dynamodb.gsi.name}")
     private String dynamoDbGsiName;
 
+    PlayerController(@Value("${spring.redis.host}") String redisHost,
+                     @Value("${dynamodb.table.name}") String dynamoDbTableName,
+                     @Value("${aws.region}") String awsRegion,
+                     @Value("${aws.accessKey}") String awsAccessKey,
+                     @Value("${aws.secretKey}") String awsSecretKey) {
 
-    PlayerController() {
-        this.awsCreds = new BasicAWSCredentials("*", "*");
-        this.dynamoDB = new DynamoDB(AmazonDynamoDBClientBuilder.standard().withRegion("eu-central-1").
-                withCredentials(new AWSStaticCredentialsProvider(awsCreds)).build());
-        this.jedis = new Jedis("global-leaderboard.i2obg1.0001.euc1.cache.amazonaws.com");
-        this.leaderboardTable = dynamoDB.getTable("leaderboard");
+        this.awsCreds = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
+        AmazonDynamoDB client = AmazonDynamoDBClientBuilder.standard().withRegion(awsRegion).
+                withCredentials(new AWSStaticCredentialsProvider(awsCreds)).build();
+        this.dynamoDB = new DynamoDB(client);
+        this.dynamoDBMapper = new DynamoDBMapper(client);
+        this.jedis = new Jedis(redisHost);
+        this.leaderboardTable = dynamoDB.getTable(dynamoDbTableName);
     }
-
 
     @GetMapping("/leaderboard")
     List<Player> getGlobalLeaderboard(@RequestBody int page) {
 
-        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, 0, page * 10 - 1);
+        if (page <= 0) throw new InvalidArgumentException("Invalid page number.");
+
+        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, (page - 1) * 10, page * 10 - 1);
         List<Player> pageList = new ArrayList<>();
 
         for (String uuid : pageUUIDs) {
@@ -102,6 +97,10 @@ class PlayerController {
     @GetMapping("/leaderboard/{countryCode}")
     List<Player> getCountryLeaderboard(@PathVariable String countryCode) {
 
+        if (countryCode == null || countryCode.length() == 0) {
+            throw new IllegalArgumentException("Invalid Country Code");
+        }
+
         ArrayList<Player> players = new ArrayList<>();
 
         try {
@@ -117,13 +116,13 @@ class PlayerController {
     }
 
     @PostMapping("/score/submit")
-    ScoreSubmission submitScore(@RequestBody ScoreSubmission scoreSubmission) throws InvalidArgumentException {
+    ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws InvalidArgumentException {
 
         try {
 
-            double scoreWorth = scoreSubmission.getScoreWorth();
-            String uuid = scoreSubmission.getUuid().toString();
-            double currentTopScore = jedis.zscore(redisTableKey, scoreSubmission.getUuid().toString());
+            double scoreWorth = scoreSubmissionRequestBody.getScoreWorth();
+            String uuid = scoreSubmissionRequestBody.getUuid().toString();
+            double currentTopScore = jedis.zscore(redisTableKey, scoreSubmissionRequestBody.getUuid().toString());
 
             if (scoreWorth > currentTopScore) {
 
@@ -131,9 +130,9 @@ class PlayerController {
 
                 leaderboardTable.updateItem(updateItemSpec);
                 jedis.zadd(redisTableKey, scoreWorth, uuid);
-                scoreSubmission.setTimestamp(System.currentTimeMillis());
+                scoreSubmissionRequestBody.setTimestamp(System.currentTimeMillis());
 
-                return scoreSubmission;
+                return scoreSubmissionRequestBody;
 
             } else throw new InvalidArgumentException("Current score is already higher.");
 
@@ -147,6 +146,8 @@ class PlayerController {
 
     @GetMapping("/user/profile/{id}")
     Player getPlayer(@PathVariable UUID uuid) {
+
+        if (uuid == null) throw new InvalidArgumentException("Invalid uuid.");
 
         Player player = null;
 
@@ -166,21 +167,33 @@ class PlayerController {
     }
 
     @PostMapping("/user/create")
-    Player createPlayer(@RequestBody PlayerCreationRequestBody requestBody) {
+    PlayerItem createPlayer(@RequestBody PlayerCreationRequestBody requestBody) {
 
-        //todo add to two database
+        // No need to add newly created user to redis
+        // Add user to redis when s/he submits a score
 
-        return new Player(requestBody.getDisplayName(), requestBody.getCountry());
+        PlayerItem playerItem = new PlayerItem(requestBody.getDisplayName(), requestBody.getCountry());
+        dynamoDBMapper.save(playerItem);
+
+        return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
-    @PutMapping("/user/profile/{id}")
-    Player editPlayer(@RequestBody Player player, @PathVariable UUID id) {
-        //todo update display name and country ??
-        return null;
+    @PutMapping("/user/profile")
+    PlayerItem editPlayer(@RequestBody PlayerItem updatedPlayerItem) {
+
+        PlayerItem playerItem = dynamoDBMapper.load(PlayerItem.class, updatedPlayerItem.getUserUuid());
+        playerItem.setDisplayName(updatedPlayerItem.getDisplayName());
+        playerItem.setCountry(updatedPlayerItem.getCountry());
+        dynamoDBMapper.save(playerItem);
+
+        return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
     @DeleteMapping("/user/profile/delete")
-    ResponseEntity<?> deletePlayer(@RequestBody Player player) {
+    ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
+
+        dynamoDBMapper.delete(playerItem);
+        jedis.del(playerItem.getUserUuid());
 
         return ResponseEntity.noContent().build();
     }
@@ -276,6 +289,8 @@ class PlayerController {
     private static void handleCommonErrors(Exception exception) {
         try {
             throw exception;
+        } catch (InvalidArgumentException e) {
+            System.out.println("Invalid Argument Error: " + e.getErrorMessage());
         } catch (InternalServerErrorException isee) {
             System.out.println("Internal Server Error, generally safe to retry with exponential back-off. Error: " + isee.getErrorMessage());
         } catch (ProvisionedThroughputExceededException ptee) {

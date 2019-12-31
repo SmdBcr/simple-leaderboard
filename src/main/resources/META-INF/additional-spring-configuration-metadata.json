@@ -1,8 +1,39 @@
 {
   "properties": [
     {
-      "name": "redis.key",
+      "name": "redis.table.key",
       "type": "java.lang.String",
-      "description": "Redis key for global leaderboard"
-  }
-] }
+      "description": "Redis table name for global leaderboard."
+    },
+    {
+      "name": "aws.accessKey",
+      "type": "java.lang.String",
+      "description": "Aws Access Key."
+    },
+    {
+      "name": "aws.secretKey",
+      "type": "java.lang.String",
+      "description": "Aws Secret Key."
+    },
+    {
+      "name": "aws.region",
+      "type": "java.lang.String",
+      "description": "Aws Region."
+    },
+    {
+      "name": "dynamodb.table.name",
+      "type": "java.lang.String",
+      "description": "DynamoDB table name for country-specific leaderboard."
+    },
+    {
+      "name": "dynamodb.primary.key",
+      "type": "java.lang.String",
+      "description": "DynamoDB Primary(Hash) Key for country-specific leaderboard."
+    },
+    {
+      "name": "dynamodb.gsi.name",
+      "type": "java.lang.String",
+      "description": "DynamoDB Global Secondary Index name for country-specific leaderboard."
+    }
+  ]
+}
