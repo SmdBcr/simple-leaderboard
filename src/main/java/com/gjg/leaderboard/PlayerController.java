@@ -132,15 +132,15 @@ public class PlayerController {
     }
 
     /**
-     * @param page the number of page for pagination
+     * @param pageNum the number of page for pagination
      * @return List of players in the current page
      */
-    @GetMapping("/leaderboard")
-    List<Player> getGlobalLeaderboard(@RequestBody int page) {
+    @GetMapping("/leaderboard/page/{pageNum}")
+    List<Player> getGlobalLeaderboard(@PathVariable int pageNum) {
 
-        if (page <= 0) throw new IllegalArgumentException("Invalid page number.");
+        if (pageNum <= 0) throw new IllegalArgumentException("Invalid page number.");
 
-        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, (page - 1) * 10, page * 10 - 1);
+        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, (pageNum - 1) * 20, pageNum * 20 - 1);
         List<Player> pageList = new ArrayList<>();
 
         for (String uuid : pageUUIDs) {
@@ -148,39 +148,6 @@ public class PlayerController {
         }
 
         return pageList;
-
-    }
-
-    /**
-     * Score Submission
-     * @param scoreSubmissionRequestBody a json object with UUID and double parameter
-     */
-    @PostMapping("/score/submit")
-    ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws IllegalArgumentException {
-
-        try {
-
-            double scoreWorth = scoreSubmissionRequestBody.getScoreWorth();
-            String uuid = scoreSubmissionRequestBody.getUuid().toString();
-            double currentTopScore = jedis.zscore(redisTableKey, scoreSubmissionRequestBody.getUuid().toString());
-
-            if (scoreWorth > currentTopScore) {
-
-                UpdateItemSpec updateItemSpec = getUpdateItemScoreSpec(uuid, scoreWorth);
-
-                leaderboardTable.updateItem(updateItemSpec);
-                jedis.zadd(redisTableKey, scoreWorth, uuid);
-                scoreSubmissionRequestBody.setTimestamp(System.currentTimeMillis());
-
-                return scoreSubmissionRequestBody;
-
-            } else throw new IllegalArgumentException("Current score is already higher.");
-
-        } catch (Exception e) {
-            handleQueryErrors(e);
-        }
-
-        return null;
 
     }
 
@@ -218,17 +185,74 @@ public class PlayerController {
     }
 
     /**
-     * Delete existing player
-     * @param playerItem
-     * @return NoContent ResponseEntity
+     * Score Submission
+     * @param scoreSubmissionRequestBody a json object with UUID and double parameter
      */
-    @DeleteMapping("/user/profile/delete")
-    ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
+    @PostMapping("/score/submit")
+    ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws IllegalArgumentException {
 
-        dynamoDBMapper.delete(playerItem);
-        jedis.del(playerItem.getUserUuid());
+        try {
 
-        return ResponseEntity.noContent().build();
+            double scoreWorth = scoreSubmissionRequestBody.getScoreWorth();
+            String uuid = scoreSubmissionRequestBody.getUuid().toString();
+
+            if (jedis.exists(scoreSubmissionRequestBody.getUuid().toString())) {
+                double currentTopScore = jedis.zscore(redisTableKey, scoreSubmissionRequestBody.getUuid().toString());
+                if (scoreWorth > currentTopScore) {
+                    UpdateItemSpec updateItemSpec = getUpdateItemScoreSpec(uuid, scoreWorth);
+                    leaderboardTable.updateItem(updateItemSpec);
+                    jedis.zadd(redisTableKey, scoreWorth, uuid);
+                    scoreSubmissionRequestBody.setTimestamp(System.currentTimeMillis());
+
+                    return scoreSubmissionRequestBody;
+
+                } else throw new IllegalArgumentException("Current score is already higher.");
+            }else {
+                UpdateItemSpec updateItemSpec = getUpdateItemScoreSpec(uuid, scoreWorth);
+                leaderboardTable.updateItem(updateItemSpec);
+                jedis.zadd(redisTableKey, scoreWorth, uuid);
+                scoreSubmissionRequestBody.setTimestamp(System.currentTimeMillis());
+
+                return scoreSubmissionRequestBody;
+            }
+
+
+
+        } catch (Exception e) {
+            handleQueryErrors(e);
+        }
+
+        return null;
+
+    }
+
+    /**
+     * Retrieve Existing Player
+     * @param playerItem UUID of the player
+     * @return Player
+     */
+    @GetMapping("/user/profile")
+    Player getPlayer(@RequestBody PlayerItem playerItem) {
+
+        UUID uuid = UUID.fromString(playerItem.getUserUuid());
+
+        if (uuid == null) throw new IllegalArgumentException("Invalid uuid.");
+
+        Player player = null;
+
+        try {
+            Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
+            JSONObject jsonItem = new JSONObject(item.toJSON());
+            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
+
+            player = objectMapper.readValue(jsonItem.toString(), Player.class);
+
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            // uuid string is wrong
+            e.printStackTrace();
+        }
+
+        return player;
     }
 
     /**
@@ -268,20 +292,18 @@ public class PlayerController {
         return updateItemSpec;
     }
 
-    private ItemCollection<QueryOutcome> getCountryItemCollectionFromDynamoDb(String countryCode) {
+    /**
+     * Delete existing player
+     * @param playerItem
+     * @return NoContent ResponseEntity
+     */
+    @DeleteMapping("/user/profile")
+    ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
 
-        Index index = leaderboardTable.getIndex(dynamoDbGsiName);
+        dynamoDBMapper.delete(playerItem);
+        jedis.del(playerItem.getUserUuid());
 
-        QuerySpec querySpec = new QuerySpec()
-                .withMaxPageSize(10)
-                .withKeyConditionExpression("country = :countryCode")
-                .withScanIndexForward(false)
-                .withValueMap(new ValueMap()
-                        .withString(":countryCode", countryCode));
-
-        ItemCollection<QueryOutcome> items = index.query(querySpec);
-
-        return items;
+        return ResponseEntity.noContent().build();
     }
 
     private ArrayList<Player> getCountryPlayerList(ItemCollection<QueryOutcome> items) throws JsonProcessingException {
@@ -297,17 +319,20 @@ public class PlayerController {
         return players;
     }
 
-    private static QuerySpec createQueryRequest(String countryCode) {
+    private ItemCollection<QueryOutcome> getCountryItemCollectionFromDynamoDb(String countryCode) {
+
+        Index index = leaderboardTable.getIndex(dynamoDbGsiName);
 
         QuerySpec querySpec = new QuerySpec()
-                .withMaxPageSize(10)
+                .withMaxPageSize(100)
                 .withKeyConditionExpression("country = :countryCode")
                 .withScanIndexForward(false)
                 .withValueMap(new ValueMap()
-                        .withString("country", countryCode));
+                        .withString(":countryCode", countryCode));
 
-        return querySpec;
+        ItemCollection<QueryOutcome> items = index.query(querySpec);
 
+        return items;
     }
 
     private static void handleQueryErrors(Exception exception) {
@@ -317,33 +342,6 @@ public class PlayerController {
             // There are no API specific errors to handle for Query, common DynamoDB API errors are handled below
             handleCommonErrors(e);
         }
-    }
-
-    /**
-     * Score Submission
-     * @param uuid UUID of the player
-     * @return Player
-     */
-    @GetMapping("/user/profile/{id}")
-    Player getPlayer(@PathVariable UUID uuid) {
-
-        if (uuid == null) throw new IllegalArgumentException("Invalid uuid.");
-
-        Player player = null;
-
-        try {
-            Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
-            JSONObject jsonItem = new JSONObject(item.toJSON());
-            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
-
-            player = objectMapper.readValue(jsonItem.toString(), Player.class);
-
-        } catch (JsonProcessingException | IllegalArgumentException e) {
-            // uuid string is wrong
-            e.printStackTrace();
-        }
-
-        return player;
     }
 
 }

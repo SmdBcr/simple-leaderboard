@@ -51,7 +51,22 @@ class PlayerControllerTest {
     @Test
     void getPlayerThrowsInvalidArgumentExceptionWithInvalidParam() {
         assertThrows(IllegalArgumentException.class, () -> {
-            Player player = playerController.getPlayer(null);
+            Player player = playerController.getPlayer(new PlayerItem(null, null));
+        });
+        assertThrows(IllegalArgumentException.class, () -> {
+            Player player = playerController.getPlayer(new PlayerItem("name", null));
+        });
+        assertThrows(IllegalArgumentException.class, () -> {
+            Player player = playerController.getPlayer(new PlayerItem(null, "tr"));
+        });
+        assertThrows(IllegalArgumentException.class, () -> {
+            Player player = playerController.getPlayer(new PlayerItem("", null));
+        });
+        assertThrows(IllegalArgumentException.class, () -> {
+            Player player = playerController.getPlayer(new PlayerItem(null, ""));
+        });
+        assertThrows(IllegalArgumentException.class, () -> {
+            Player player = playerController.getPlayer(new PlayerItem("", ""));
         });
     }
 
