@@ -11,10 +11,26 @@ import java.util.UUID;
 @Entity
 public class Player {
 
-    private @Id UUID userUuid;
+    /**
+     * The UUID representation for player
+     */
+    private @Id
+    UUID userUuid;
+    /**
+     * Display name of the player
+     */
     private String displayName;
+    /**
+     * Top score for the player
+     */
     private double points;
+    /**
+     * The rank of the player in the global leaderboard
+     */
     private long rank;
+    /**
+     * Country representation of the player as country iso code
+     */
     private String country;
 
     Player() {
@@ -87,9 +103,3 @@ public class Player {
         this.rank = rank;
     }
 }
-
-
-
-
-
-

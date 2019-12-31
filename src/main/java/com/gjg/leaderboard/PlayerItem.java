@@ -35,7 +35,6 @@ public class PlayerItem {
         this.points = 0;
     }
 
-
     @DynamoDBHashKey(attributeName = "userUuid")
     public String getUserUuid() {
         return userUuid.toString();
