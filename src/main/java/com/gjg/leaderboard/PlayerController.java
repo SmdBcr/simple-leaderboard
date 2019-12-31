@@ -13,6 +13,7 @@ import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.InternalServerErrorException;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException;
 import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -33,6 +34,8 @@ class PlayerController {
     private BasicAWSCredentials awsCreds;
     private DynamoDB dynamoDB;
     Jedis jedis;
+    ObjectMapper objectMapper = new ObjectMapper();
+    Table leaderboardTable;
 
     @Value("${redis.key}")
     private String redisKey;
@@ -43,19 +46,30 @@ class PlayerController {
         this.dynamoDB = new DynamoDB(AmazonDynamoDBClientBuilder.standard().withRegion("eu-central-1").
                 withCredentials(new AWSStaticCredentialsProvider(awsCreds)).build());
         this.jedis = new Jedis("global-leaderboard.i2obg1.0001.euc1.cache.amazonaws.com");
+        this.leaderboardTable = dynamoDB.getTable("leaderboard");
     }
 
     // Aggregate root
 
     @GetMapping("/leaderboard")
     List<Player> globalLeaderboard() {
-        return repository.findAll();
+
+
+        return null;
     }
 
-    @GetMapping("/leaderboardd")
-    Set<String> globalRedisLeaderboard() {
-        return jedis.zrevrange(redisKey, 0, -1);
-        //jedis.zrevrangeByScoreWithScores();
+    @GetMapping("/leaderboard/top10")
+    List<Player> globalRedisLeaderboard() {
+
+        Set<String> top10UUIDs = jedis.zrevrange(redisKey, 0, 9);
+        List<Player> top10 = new ArrayList<>();
+
+        for (String uuid : top10UUIDs) {
+            top10.add(getPlayerFromDynamoDb(uuid));
+        }
+
+        return top10;
+
     }
 
     @GetMapping("/leaderboard/{countryCode}")
@@ -65,8 +79,7 @@ class PlayerController {
 
             ArrayList<Player> players = new ArrayList<>();
 
-            Table table = dynamoDB.getTable("leaderboard");
-            Index index = table.getIndex("country-points-index");
+            Index index = leaderboardTable.getIndex("country-points-index");
 
             QuerySpec querySpec = new QuerySpec()
                     .withMaxPageSize(10)
@@ -78,7 +91,6 @@ class PlayerController {
             ItemCollection<QueryOutcome> items = index.query(querySpec);
 
             JSONArray jsonArray = new JSONArray();
-            ObjectMapper objectMapper = new ObjectMapper();
 
             for (Item item : items) {
                 JSONObject jsonItem = new JSONObject(item.toJSON());
@@ -118,9 +130,7 @@ class PlayerController {
                         .withValueMap(new ValueMap()
                                 .withNumber(":newPoints", scoreWorth));
 
-                Table table = dynamoDB.getTable("leaderboard");
-
-                table.updateItem(updateItemSpec);
+                leaderboardTable.updateItem(updateItemSpec);
 
                 jedis.zadd(redisKey, scoreWorth, uuid);
 
@@ -133,18 +143,34 @@ class PlayerController {
         }
 
 
-
-
         return null;
     }
 
     // Single item
     @GetMapping("/user/profile/{id}")
-    Player getPlayer(@PathVariable UUID id) {
+    Player getPlayer(@PathVariable UUID uuid) {
 
-        return repository.findById(id)
-                .orElseThrow(() -> new PlayerNotFoundException(id));
+        /*QuerySpec querySpec = new QuerySpec()
+                .withKeyConditionExpression("userUuid = :uuid")
+                .withScanIndexForward(false)
+                .withValueMap(new ValueMap()
+                        .withString(":uuid", uuid.toString()));*/
+        try {
 
+
+            Item item = leaderboardTable.getItem("userUuid", uuid.toString());
+            JSONObject jsonItem = new JSONObject(item.toJSON());
+            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisKey, uuid.toString()), 1));
+
+            Player player = objectMapper.readValue(jsonItem.toString(), Player.class);
+
+            return player;
+
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+
+        return null;
     }
 
 
@@ -167,6 +193,47 @@ class PlayerController {
     ResponseEntity<?> deletePlayer(@RequestBody Player player) {
         repository.deleteById(player.getUserUuid());
         return ResponseEntity.noContent().build();
+    }
+
+    private Player getPlayerFromDynamoDb(UUID uuid) {
+
+        Player player = null;
+
+        try {
+            Item item = leaderboardTable.getItem("userUuid", uuid.toString());
+            JSONObject jsonItem = new JSONObject(item.toJSON());
+            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisKey, uuid.toString()), 1));
+
+            player = objectMapper.readValue(jsonItem.toString(), Player.class);
+
+        } catch (JsonProcessingException e) {
+            e.printStackTrace();
+        }
+
+        return player;
+    }
+
+    private Player getPlayerFromDynamoDb(String uuidString) {
+
+        Player player = null;
+
+        try {
+            UUID uuid = UUID.fromString(uuidString);
+
+            Item item = leaderboardTable.getItem("userUuid", uuid.toString());
+            JSONObject jsonItem = new JSONObject(item.toJSON());
+            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisKey, uuid.toString()), 1));
+
+            player = objectMapper.readValue(jsonItem.toString(), Player.class);
+
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            // uuid string is wrong
+            e.printStackTrace();
+        }
+
+
+
+        return player;
     }
 
     private static QuerySpec createQueryRequest(String countryCode) {

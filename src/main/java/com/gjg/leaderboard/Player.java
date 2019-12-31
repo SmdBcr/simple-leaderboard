@@ -1,11 +1,13 @@
 package com.gjg.leaderboard;
 
 
+import lombok.Data;
+
 import javax.persistence.Entity;
 import javax.persistence.Id;
 import java.util.UUID;
 
-
+@Data
 @Entity
 public class Player {
 
@@ -16,7 +18,7 @@ public class Player {
     private String country;
     Player() {}
 
-    public Player(String displayName, String country) {
+    Player(String displayName, String country) {
         this.displayName = displayName;
         this.country = country;
     }
