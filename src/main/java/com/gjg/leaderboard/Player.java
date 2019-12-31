@@ -11,7 +11,7 @@ import java.util.UUID;
 @Entity
 public class Player {
 
-    private @Id /*@Transient*/ UUID userUuid = UUID.randomUUID();
+    private @Id /*@Transient*/ UUID userUuid;
     private String displayName;
     private double points;
     private long rank;
@@ -19,6 +19,7 @@ public class Player {
     Player() {}
 
     Player(String displayName, String country) {
+        this.userUuid = UUID.randomUUID();
         this.displayName = displayName;
         this.country = country;
     }
