@@ -158,13 +158,9 @@ public class PlayerController {
      */
     @PostMapping("/user/create")
     PlayerItem createPlayer(@RequestBody PlayerCreationRequestBody playerCreationRequestBody) {
-
-        // No need to add newly created user to redis
-        // Add user to redis when s/he submits a score
-
         PlayerItem playerItem = new PlayerItem(playerCreationRequestBody.getDisplayName(), playerCreationRequestBody.getCountry());
         dynamoDBMapper.save(playerItem);
-
+        jedis.zadd(redisTableKey, 0, playerItem.getUserUuid());
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
