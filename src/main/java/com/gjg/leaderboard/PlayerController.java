@@ -8,6 +8,7 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.document.*;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
+import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
 import com.amazonaws.services.dynamodbv2.model.InternalServerErrorException;
 import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededException;
@@ -15,6 +16,7 @@ import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import redis.clients.jedis.Jedis;
@@ -28,11 +30,12 @@ import java.util.UUID;
 class PlayerController {
 
     private final PlayerRepository repository;
-
-
     private BasicAWSCredentials awsCreds;
     private DynamoDB dynamoDB;
     Jedis jedis;
+
+    @Value("${redis.key}")
+    private String redisKey;
 
     PlayerController(PlayerRepository repository) {
         this.repository = repository;
@@ -51,7 +54,8 @@ class PlayerController {
 
     @GetMapping("/leaderboardd")
     Set<String> globalRedisLeaderboard() {
-        return jedis.zrevrange("globalLeaderboard", 0, -1);
+        return jedis.zrevrange(redisKey, 0, -1);
+        //jedis.zrevrangeByScoreWithScores();
     }
 
     @GetMapping("/leaderboard/{countryCode}")
@@ -78,7 +82,7 @@ class PlayerController {
 
             for (Item item : items) {
                 JSONObject jsonItem = new JSONObject(item.toJSON());
-                jsonItem.put("rank", Long.sum(jedis.zrevrank("globalLeaderboard", jsonItem.getString("userUuid")), 1));
+                jsonItem.put("rank", Long.sum(jedis.zrevrank(redisKey, jsonItem.getString("userUuid")), 1));
                 jsonArray.put(jsonItem);
                 players.add(objectMapper.readValue(jsonItem.toString(), Player.class));
             }
@@ -99,6 +103,37 @@ class PlayerController {
     @PostMapping("/score/submit")
     ScoreSubmission newScoreSubmission(@RequestBody ScoreSubmission scoreSubmission) {
         //todo update score if higher than last one
+
+        try {
+
+            double scoreWorth = scoreSubmission.getScoreWorth();
+            String uuid = scoreSubmission.getUuid().toString();
+            double currentTopScore = jedis.zscore(redisKey, scoreSubmission.getUuid().toString());
+
+            if (scoreWorth > currentTopScore) {
+
+                UpdateItemSpec updateItemSpec = new UpdateItemSpec()
+                        .withPrimaryKey("userUuid", uuid)
+                        .withUpdateExpression("SET points = :newPoints")
+                        .withValueMap(new ValueMap()
+                                .withNumber(":newPoints", scoreWorth));
+
+                Table table = dynamoDB.getTable("leaderboard");
+
+                table.updateItem(updateItemSpec);
+
+                jedis.zadd(redisKey, scoreWorth, uuid);
+
+                scoreSubmission.setTimestamp(System.currentTimeMillis());
+                return scoreSubmission;
+
+            }
+        } catch (Exception e) {
+            handleQueryErrors(e);
+        }
+
+
+
 
         return null;
     }
@@ -141,7 +176,7 @@ class PlayerController {
                 .withKeyConditionExpression("country = :countryCode")
                 .withScanIndexForward(false)
                 .withValueMap(new ValueMap()
-                .withString("country", countryCode));
+                        .withString("country", countryCode));
 
         return querySpec;
 

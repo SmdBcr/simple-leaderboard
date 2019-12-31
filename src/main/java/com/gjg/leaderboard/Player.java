@@ -11,7 +11,7 @@ public class Player {
 
     private @Id /*@Transient*/ UUID userUuid = UUID.randomUUID();
     private String displayName;
-    private int points;
+    private double points;
     private long rank;
     private String country;
     Player() {}
@@ -27,14 +27,14 @@ public class Player {
         this.country = country;
     }
 
-    public Player(UUID userUuid, String displayName, String country, int points) {
+    public Player(UUID userUuid, String displayName, String country, double points) {
         this.userUuid = userUuid;
         this.displayName = displayName;
         this.country = country;
         this.points = points;
     }
 
-    public Player(UUID userUuid, String displayName, String country, int points, long rank) {
+    public Player(UUID userUuid, String displayName, String country, double points, long rank) {
         this.userUuid = userUuid;
         this.displayName = displayName;
         this.country = country;
@@ -67,11 +67,11 @@ public class Player {
         this.userUuid = userUuid;
     }
 
-    public int getPoints() {
+    public double getPoints() {
         return points;
     }
 
-    public void setPoints(int points) {
+    public void setPoints(double points) {
         this.points = points;
     }
 

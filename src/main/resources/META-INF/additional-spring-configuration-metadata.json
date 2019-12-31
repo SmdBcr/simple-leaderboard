@@ -1,0 +1,8 @@
+{
+  "properties": [
+    {
+      "name": "redis.key",
+      "type": "java.lang.String",
+      "description": "Redis key for global leaderboard"
+  }
+] }
