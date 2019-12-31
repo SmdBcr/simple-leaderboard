@@ -11,13 +11,13 @@ import java.util.UUID;
 public class ScoreSubmissionRequestBody {
     private @Id
     UUID uuid;
-    private int scoreWorth;
+    private double scoreWorth;
     private long timestamp;
 
     ScoreSubmissionRequestBody() {
     }
 
-    public ScoreSubmissionRequestBody(UUID uuid, int scoreWorth) {
+    public ScoreSubmissionRequestBody(UUID uuid, double scoreWorth) {
 
         if (uuid == null || scoreWorth <= 0)
             throw new InvalidArgumentException("Invalid score submission");
@@ -35,11 +35,11 @@ public class ScoreSubmissionRequestBody {
         this.uuid = uuid;
     }
 
-    public int getScoreWorth() {
+    public double getScoreWorth() {
         return scoreWorth;
     }
 
-    public void setScoreWorth(int scoreWorth) {
+    public void setScoreWorth(double scoreWorth) {
         this.scoreWorth = scoreWorth;
     }
 

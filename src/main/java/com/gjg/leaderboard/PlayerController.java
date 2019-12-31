@@ -9,7 +9,6 @@ import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
 import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
 import com.amazonaws.services.dynamodbv2.document.*;
-import com.amazonaws.services.dynamodbv2.document.spec.PutItemSpec;
 import com.amazonaws.services.dynamodbv2.document.spec.QuerySpec;
 import com.amazonaws.services.dynamodbv2.document.spec.UpdateItemSpec;
 import com.amazonaws.services.dynamodbv2.document.utils.ValueMap;
@@ -31,7 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @RestController
-class PlayerController {
+public class PlayerController {
 
     private BasicAWSCredentials awsCreds;
     private DynamoDB dynamoDB;
@@ -64,6 +63,10 @@ class PlayerController {
         this.leaderboardTable = dynamoDB.getTable(dynamoDbTableName);
     }
 
+    /**
+     * @param page the number of page for pagination
+     * @return List of players in the current page
+     */
     @GetMapping("/leaderboard")
     List<Player> getGlobalLeaderboard(@RequestBody int page) {
 
@@ -80,6 +83,9 @@ class PlayerController {
 
     }
 
+    /**
+     * @return The top 10 from global leaderboard
+     */
     @GetMapping("/leaderboard/top10")
     List<Player> getLeaderboardTop10() {
 
@@ -94,6 +100,11 @@ class PlayerController {
 
     }
 
+    /**
+     * @param countryCode country-iso-code for country specific leaderboard
+     * @return List of players in the current page of country specific leaderboard
+     * @see <a href="https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes">Country iso codes</a>
+     */
     @GetMapping("/leaderboard/{countryCode}")
     List<Player> getCountryLeaderboard(@PathVariable String countryCode) {
 
@@ -115,6 +126,10 @@ class PlayerController {
         return players;
     }
 
+    /**
+     * Score Submission
+     * @param scoreSubmissionRequestBody a json object with UUID and double parameter
+     */
     @PostMapping("/score/submit")
     ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws InvalidArgumentException {
 
@@ -144,6 +159,11 @@ class PlayerController {
 
     }
 
+    /**
+     * Score Submission
+     * @param uuid UUID of the player
+     * @return Player
+     */
     @GetMapping("/user/profile/{id}")
     Player getPlayer(@PathVariable UUID uuid) {
 
@@ -166,18 +186,28 @@ class PlayerController {
         return player;
     }
 
+    /**
+     * New Player Creation
+     * @param playerCreationRequestBody
+     * @return PlayerItem
+     */
     @PostMapping("/user/create")
-    PlayerItem createPlayer(@RequestBody PlayerCreationRequestBody requestBody) {
+    PlayerItem createPlayer(@RequestBody PlayerCreationRequestBody playerCreationRequestBody) {
 
         // No need to add newly created user to redis
         // Add user to redis when s/he submits a score
 
-        PlayerItem playerItem = new PlayerItem(requestBody.getDisplayName(), requestBody.getCountry());
+        PlayerItem playerItem = new PlayerItem(playerCreationRequestBody.getDisplayName(), playerCreationRequestBody.getCountry());
         dynamoDBMapper.save(playerItem);
 
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
+    /**
+     * Edit existing player info
+     * @param updatedPlayerItem
+     * @return PlayerItem
+     */
     @PutMapping("/user/profile")
     PlayerItem editPlayer(@RequestBody PlayerItem updatedPlayerItem) {
 
@@ -189,6 +219,11 @@ class PlayerController {
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
+    /**
+     * Delete existing player
+     * @param playerItem
+     * @return NoContent ResponseEntity
+     */
     @DeleteMapping("/user/profile/delete")
     ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
 
@@ -198,6 +233,11 @@ class PlayerController {
         return ResponseEntity.noContent().build();
     }
 
+    /**
+     * Return player corresponding to uuid
+     * @param uuidString String form of UUID of the player
+     * @return Player
+     */
     private Player getPlayer(String uuidString) {
 
         Player player = null;
@@ -228,11 +268,6 @@ class PlayerController {
                         .withNumber(":newPoints", scoreWorth));
 
         return updateItemSpec;
-    }
-
-    private PutItemSpec getPutItemSpec(String displayName, String countryCode) {
-
-        return null;
     }
 
     private ItemCollection<QueryOutcome> getCountryItemCollectionFromDynamoDb(String countryCode) {
