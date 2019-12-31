@@ -27,7 +27,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
   * **example request json** 
 
     {
-        "uuid" : "1e673707-8380-42bd-a798-ccb29bff834c",
+        "userUuid" : "1e673707-8380-42bd-a798-ccb29bff834c",
         "scoreWorth" : 999
     }
 
@@ -49,7 +49,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
   * **example request json** 
 
     {
-        "uuid" : "1e673707-8380-42bd-a798-ccb29bff834c"
+        "userUuid" : "1e673707-8380-42bd-a798-ccb29bff834c"
     }
 
 ---
@@ -59,7 +59,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
   * **example request json** 
 
     {
-        "uuid" : "1e673707-8380-42bd-a798-ccb29bff834c",
+        "userUuid" : "1e673707-8380-42bd-a798-ccb29bff834c",
         "displayName" : "Sam",
         "country" : "uk"
     }
@@ -71,7 +71,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
   * **example request json** 
 
     {
-        "uuid" : "1e673707-8380-42bd-a798-ccb29bff834c",
+        "userUuid" : "1e673707-8380-42bd-a798-ccb29bff834c",
     }
 
 
