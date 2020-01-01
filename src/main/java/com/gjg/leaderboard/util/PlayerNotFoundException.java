@@ -1,4 +1,4 @@
-package com.gjg.leaderboard.impl;
+package com.gjg.leaderboard.util;
 
 import java.util.UUID;
 

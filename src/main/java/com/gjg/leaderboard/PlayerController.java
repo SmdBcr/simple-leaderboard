@@ -17,7 +17,6 @@ import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughputExceededExce
 import com.amazonaws.services.dynamodbv2.model.ResourceNotFoundException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.javafaker.Faker;
 import com.gjg.leaderboard.pojo.Player;
 import com.gjg.leaderboard.pojo.PlayerItem;
 import com.gjg.leaderboard.request.PlayerCreationRequestBody;
@@ -32,7 +31,10 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @RestController
 public class PlayerController {
@@ -70,51 +72,28 @@ public class PlayerController {
         warpUpJedisPool();
     }
 
-    private static void handleCommonErrors(Exception exception) {
-        try {
-            throw exception;
-        } catch (IllegalArgumentException e) {
-            System.out.println("Invalid Argument Error: " + e.getMessage());
-        } catch (InternalServerErrorException isee) {
-            System.out.println("Internal Server Error, generally safe to retry with exponential back-off. Error: " + isee.getErrorMessage());
-        } catch (ProvisionedThroughputExceededException ptee) {
-            System.out.println("Request rate is too high. If you're using a custom retry strategy make sure to retry with exponential back-off. " +
-                    "Otherwise consider reducing frequency of requests or increasing provisioned capacity for your table or secondary index. Error: " +
-                    ptee.getErrorMessage());
-        } catch (ResourceNotFoundException rnfe) {
-            System.out.println("One of the tables was not found, verify table exists before retrying. Error: " + rnfe.getErrorMessage());
-        } catch (AmazonServiceException ase) {
-            System.out.println("An AmazonServiceException occurred, indicates that the request was correctly transmitted to the DynamoDB " +
-                    "service, but for some reason, the service was not able to process it, and returned an error response instead. Investigate and " +
-                    "configure retry strategy. Error type: " + ase.getErrorType() + ". Error message: " + ase.getErrorMessage());
-        } catch (AmazonClientException ace) {
-            System.out.println("An AmazonClientException occurred, indicates that the client was unable to get a response from DynamoDB " +
-                    "service, or the client was unable to parse the response from the service. Investigate and configure retry strategy. " +
-                    "Error: " + ace.getMessage());
-        } catch (Exception e) {
-            System.out.println("An exception occurred, investigate and configure retry strategy. Error: " + e.getMessage());
-        }
-    }
-
     /**
-     * @return The top 10 from global leaderboard
+     * @param pageNum the number of page for pagination
+     * @return List of players in the current page
      */
-    @GetMapping("/leaderboard/top10")
-    List<Player> getLeaderboardTop10() {
+    @GetMapping("/leaderboard/page/{pageNum}")
+    List<Player> getGlobalLeaderboard(@PathVariable int pageNum) {
 
-        Set<String> top10UUIDs;
+        if (pageNum <= 0) throw new IllegalArgumentException("Invalid page number.");
 
-        try (Jedis jedis = jedisPool.getResource()) {
-            top10UUIDs = jedis.zrevrange(redisTableKey, 0, 9);
+        Set<String> pageUUIDs;
+
+        try(Jedis jedis = jedisPool.getResource()){
+            pageUUIDs = jedis.zrevrange(redisTableKey, (pageNum - 1) * 20, pageNum * 20 - 1);
         }
 
-        List<Player> top10 = new ArrayList<>();
+        List<Player> pageList = new ArrayList<>();
 
-        for (String uuid : top10UUIDs) {
-            top10.add(getPlayer(uuid));
+        for (String uuid : pageUUIDs) {
+            pageList.add(getPlayer(uuid));
         }
 
-        return top10;
+        return pageList;
 
     }
 
@@ -145,28 +124,70 @@ public class PlayerController {
     }
 
     /**
-     * @param pageNum the number of page for pagination
-     * @return List of players in the current page
+     * @return The top 10 from global leaderboard
      */
-    @GetMapping("/leaderboard/page/{pageNum}")
-    List<Player> getGlobalLeaderboard(@PathVariable int pageNum) {
+    @GetMapping("/leaderboard/top10")
+    List<Player> getLeaderboardTop10() {
 
-        if (pageNum <= 0) throw new IllegalArgumentException("Invalid page number.");
+        Set<String> top10UUIDs;
 
-        Set<String> pageUUIDs;
-
-        try(Jedis jedis = jedisPool.getResource()){
-            pageUUIDs = jedis.zrevrange(redisTableKey, (pageNum - 1) * 20, pageNum * 20 - 1);
+        try (Jedis jedis = jedisPool.getResource()) {
+            top10UUIDs = jedis.zrevrange(redisTableKey, 0, 9);
         }
 
-        List<Player> pageList = new ArrayList<>();
+        List<Player> top10 = new ArrayList<>();
 
-        for (String uuid : pageUUIDs) {
-            pageList.add(getPlayer(uuid));
+        for (String uuid : top10UUIDs) {
+            top10.add(getPlayer(uuid));
         }
 
-        return pageList;
+        return top10;
 
+    }
+
+    /**
+     * Retrieve Existing Player
+     * @param playerItem UUID of the player
+     * @return Player
+     */
+    @GetMapping("/user/profile")
+    Player getPlayer(@RequestBody PlayerItem playerItem) {
+
+        UUID uuid = UUID.fromString(playerItem.getUserUuid());
+
+        if (uuid == null) throw new IllegalArgumentException("Invalid uuid.");
+
+        Player player = null;
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
+            JSONObject jsonItem = new JSONObject(item.toJSON());
+            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
+
+            player = objectMapper.readValue(jsonItem.toString(), Player.class);
+
+        } catch (JsonProcessingException | IllegalArgumentException e) {
+            // uuid string is wrong
+            e.printStackTrace();
+        }
+
+        return player;
+    }
+
+    /**
+     * Edit existing player info
+     * @param updatedPlayerItem
+     * @return PlayerItem
+     */
+    @PutMapping("/user/profile")
+    PlayerItem editPlayer(@RequestBody PlayerItem updatedPlayerItem) {
+
+        PlayerItem playerItem = dynamoDBMapper.load(PlayerItem.class, updatedPlayerItem.getUserUuid());
+        playerItem.setDisplayName(updatedPlayerItem.getDisplayName());
+        playerItem.setCountry(updatedPlayerItem.getCountry());
+        dynamoDBMapper.save(playerItem);
+
+        return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
     /**
@@ -197,51 +218,6 @@ public class PlayerController {
             jedis.zadd(redisTableKey, playerItem.getPoints(), playerItem.getUserUuid());
         }
         return ResponseEntity.accepted().build();
-    }
-
-    /**
-     * Fake New Player Creation for testing
-     * @return PlayerItem
-     */
-    @Deprecated
-    @PostMapping("/user/createrandom")
-    PlayerItem createRandomPlayerWithScores() {
-        Faker faker = new Faker();
-        Random random = new Random();
-
-        int randomPoint = random.nextInt(10000) + 1;
-        PlayerItem playerItem;
-
-        if (randomPoint % 3 == 1) {
-            playerItem = new PlayerItem(faker.firstName(), "tr", randomPoint);
-        }else if (randomPoint % 3 == 2) {
-            playerItem = new PlayerItem(faker.firstName(), "uk", randomPoint);
-        } else {
-            playerItem = new PlayerItem(faker.firstName(), "us", randomPoint);
-        }
-
-        dynamoDBMapper.save(playerItem);
-        try(Jedis jedis = jedisPool.getResource()){
-            jedis.zadd(redisTableKey, randomPoint, playerItem.getUserUuid());
-        }
-
-        return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
-    }
-
-    /**
-     * Edit existing player info
-     * @param updatedPlayerItem
-     * @return PlayerItem
-     */
-    @PutMapping("/user/profile")
-    PlayerItem editPlayer(@RequestBody PlayerItem updatedPlayerItem) {
-
-        PlayerItem playerItem = dynamoDBMapper.load(PlayerItem.class, updatedPlayerItem.getUserUuid());
-        playerItem.setDisplayName(updatedPlayerItem.getDisplayName());
-        playerItem.setCountry(updatedPlayerItem.getCountry());
-        dynamoDBMapper.save(playerItem);
-
-        return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
     /**
@@ -285,32 +261,19 @@ public class PlayerController {
     }
 
     /**
-     * Retrieve Existing Player
-     * @param playerItem UUID of the player
-     * @return Player
+     * Delete existing player
+     * @param playerItem
+     * @return NoContent ResponseEntity
      */
-    @GetMapping("/user/profile")
-    Player getPlayer(@RequestBody PlayerItem playerItem) {
+    @DeleteMapping("/user/profile")
+    ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
 
-        UUID uuid = UUID.fromString(playerItem.getUserUuid());
-
-        if (uuid == null) throw new IllegalArgumentException("Invalid uuid.");
-
-        Player player = null;
-
+        dynamoDBMapper.delete(playerItem);
         try (Jedis jedis = jedisPool.getResource()) {
-            Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
-            JSONObject jsonItem = new JSONObject(item.toJSON());
-            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
-
-            player = objectMapper.readValue(jsonItem.toString(), Player.class);
-
-        } catch (JsonProcessingException | IllegalArgumentException e) {
-            // uuid string is wrong
-            e.printStackTrace();
+            jedis.del(playerItem.getUserUuid());
         }
 
-        return player;
+        return ResponseEntity.noContent().build();
     }
 
     /**
@@ -350,22 +313,6 @@ public class PlayerController {
         return updateItemSpec;
     }
 
-    /**
-     * Delete existing player
-     * @param playerItem
-     * @return NoContent ResponseEntity
-     */
-    @DeleteMapping("/user/profile")
-    ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
-
-        dynamoDBMapper.delete(playerItem);
-        try (Jedis jedis = jedisPool.getResource()) {
-            jedis.del(playerItem.getUserUuid());
-        }
-
-        return ResponseEntity.noContent().build();
-    }
-
     private ArrayList<Player> getCountryPlayerList(ItemCollection<QueryOutcome> items) throws JsonProcessingException {
 
         ArrayList<Player> players = new ArrayList<>();
@@ -395,6 +342,32 @@ public class PlayerController {
         ItemCollection<QueryOutcome> items = index.query(querySpec);
 
         return items;
+    }
+
+    private static void handleCommonErrors(Exception exception) {
+        try {
+            throw exception;
+        } catch (IllegalArgumentException e) {
+            System.out.println("Invalid Argument Error: " + e.getMessage());
+        } catch (InternalServerErrorException isee) {
+            System.out.println("Internal Server Error, generally safe to retry with exponential back-off. Error: " + isee.getErrorMessage());
+        } catch (ProvisionedThroughputExceededException ptee) {
+            System.out.println("Request rate is too high. If you're using a custom retry strategy make sure to retry with exponential back-off. " +
+                    "Otherwise consider reducing frequency of requests or increasing provisioned capacity for your table or secondary index. Error: " +
+                    ptee.getErrorMessage());
+        } catch (ResourceNotFoundException rnfe) {
+            System.out.println("One of the tables was not found, verify table exists before retrying. Error: " + rnfe.getErrorMessage());
+        } catch (AmazonServiceException ase) {
+            System.out.println("An AmazonServiceException occurred, indicates that the request was correctly transmitted to the DynamoDB " +
+                    "service, but for some reason, the service was not able to process it, and returned an error response instead. Investigate and " +
+                    "configure retry strategy. Error type: " + ase.getErrorType() + ". Error message: " + ase.getErrorMessage());
+        } catch (AmazonClientException ace) {
+            System.out.println("An AmazonClientException occurred, indicates that the client was unable to get a response from DynamoDB " +
+                    "service, or the client was unable to parse the response from the service. Investigate and configure retry strategy. " +
+                    "Error: " + ace.getMessage());
+        } catch (Exception e) {
+            System.out.println("An exception occurred, investigate and configure retry strategy. Error: " + e.getMessage());
+        }
     }
 
     private static void handleQueryErrors(Exception exception) {

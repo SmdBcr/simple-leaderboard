@@ -6,7 +6,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 **Notes**
 
-1. Global Leaderboard - GET /leaderboard
+1. Global Leaderboard - GET /leaderboard/{page}
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/{page}
 * {page} --> {1, 2, 3, 4, 5 ... N} for pagination
   
