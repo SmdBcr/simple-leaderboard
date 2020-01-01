@@ -21,6 +21,7 @@ import com.github.javafaker.Faker;
 import com.gjg.leaderboard.pojo.Player;
 import com.gjg.leaderboard.pojo.PlayerItem;
 import com.gjg.leaderboard.request.PlayerCreationRequestBody;
+import com.gjg.leaderboard.request.PlayerCreationWithScoreRequestBody;
 import com.gjg.leaderboard.request.ScoreSubmissionRequestBody;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
@@ -184,9 +185,25 @@ public class PlayerController {
     }
 
     /**
+     * New Player Creation with scores
+     * @param requestBody
+     * @return PlayerItem
+     */
+    @PostMapping("/user/create/score")
+    ResponseEntity<?> createPlayerWithScore(@RequestBody PlayerCreationWithScoreRequestBody requestBody) {
+        PlayerItem playerItem = new PlayerItem(requestBody.getDisplayName(), requestBody.getCountry(), requestBody.getPoints());
+        dynamoDBMapper.save(playerItem);
+        try(Jedis jedis = jedisPool.getResource()){
+            jedis.zadd(redisTableKey, playerItem.getPoints(), playerItem.getUserUuid());
+        }
+        return ResponseEntity.accepted().build();
+    }
+
+    /**
      * Fake New Player Creation for testing
      * @return PlayerItem
      */
+    @Deprecated
     @PostMapping("/user/createrandom")
     PlayerItem createRandomPlayerWithScores() {
         Faker faker = new Faker();
@@ -258,8 +275,6 @@ public class PlayerController {
 
                 return scoreSubmissionRequestBody;
             }
-
-
 
         } catch (Exception e) {
             handleQueryErrors(e);
