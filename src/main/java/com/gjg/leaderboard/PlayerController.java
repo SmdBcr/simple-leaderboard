@@ -27,7 +27,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 
+import java.time.Duration;
 import java.util.*;
 
 @RestController
@@ -35,10 +38,11 @@ public class PlayerController {
 
     private BasicAWSCredentials awsCreds;
     private DynamoDB dynamoDB;
-    Jedis jedis;
+    final JedisPoolConfig jedisPoolConfig = buildPoolConfig();
     ObjectMapper objectMapper = new ObjectMapper();
     Table leaderboardTable;
     DynamoDBMapper dynamoDBMapper;
+    private JedisPool jedisPool;
 
     @Value("${redis.table.key}")
     private String redisTableKey;
@@ -60,8 +64,9 @@ public class PlayerController {
                 withCredentials(new AWSStaticCredentialsProvider(awsCreds)).build();
         this.dynamoDB = new DynamoDB(client);
         this.dynamoDBMapper = new DynamoDBMapper(client);
-        this.jedis = new Jedis(redisHost);
+        this.jedisPool = new JedisPool(jedisPoolConfig, redisHost);
         this.leaderboardTable = dynamoDB.getTable(dynamoDbTableName);
+        warpUpJedisPool();
     }
 
     private static void handleCommonErrors(Exception exception) {
@@ -96,7 +101,12 @@ public class PlayerController {
     @GetMapping("/leaderboard/top10")
     List<Player> getLeaderboardTop10() {
 
-        Set<String> top10UUIDs = jedis.zrevrange(redisTableKey, 0, 9);
+        Set<String> top10UUIDs;
+
+        try (Jedis jedis = jedisPool.getResource()) {
+            top10UUIDs = jedis.zrevrange(redisTableKey, 0, 9);
+        }
+
         List<Player> top10 = new ArrayList<>();
 
         for (String uuid : top10UUIDs) {
@@ -142,7 +152,12 @@ public class PlayerController {
 
         if (pageNum <= 0) throw new IllegalArgumentException("Invalid page number.");
 
-        Set<String> pageUUIDs = jedis.zrevrange(redisTableKey, (pageNum - 1) * 20, pageNum * 20 - 1);
+        Set<String> pageUUIDs;
+
+        try(Jedis jedis = jedisPool.getResource()){
+            pageUUIDs = jedis.zrevrange(redisTableKey, (pageNum - 1) * 20, pageNum * 20 - 1);
+        }
+
         List<Player> pageList = new ArrayList<>();
 
         for (String uuid : pageUUIDs) {
@@ -162,7 +177,9 @@ public class PlayerController {
     PlayerItem createPlayer(@RequestBody PlayerCreationRequestBody playerCreationRequestBody) {
         PlayerItem playerItem = new PlayerItem(playerCreationRequestBody.getDisplayName(), playerCreationRequestBody.getCountry());
         dynamoDBMapper.save(playerItem);
-        jedis.zadd(redisTableKey, 0, playerItem.getUserUuid());
+        try(Jedis jedis = jedisPool.getResource()){
+            jedis.zadd(redisTableKey, 0, playerItem.getUserUuid());
+        }
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
 
@@ -170,7 +187,7 @@ public class PlayerController {
      * Fake New Player Creation for testing
      * @return PlayerItem
      */
-    @GetMapping("/user/createrandom")
+    @PostMapping("/user/createrandom")
     PlayerItem createRandomPlayerWithScores() {
         Faker faker = new Faker();
         Random random = new Random();
@@ -187,7 +204,9 @@ public class PlayerController {
         }
 
         dynamoDBMapper.save(playerItem);
-        jedis.zadd(redisTableKey, randomPoint, playerItem.getUserUuid());
+        try(Jedis jedis = jedisPool.getResource()){
+            jedis.zadd(redisTableKey, randomPoint, playerItem.getUserUuid());
+        }
 
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
     }
@@ -215,7 +234,7 @@ public class PlayerController {
     @PostMapping("/score/submit")
     ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws IllegalArgumentException {
 
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
 
             double scoreWorth = scoreSubmissionRequestBody.getScoreWorth();
             String uuid = scoreSubmissionRequestBody.getUuid().toString();
@@ -264,7 +283,7 @@ public class PlayerController {
 
         Player player = null;
 
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
             Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
             JSONObject jsonItem = new JSONObject(item.toJSON());
             jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, uuid.toString()), 1));
@@ -288,7 +307,7 @@ public class PlayerController {
 
         Player player = null;
 
-        try {
+        try (Jedis jedis = jedisPool.getResource()) {
             UUID uuid = UUID.fromString(uuidString);
 
             Item item = leaderboardTable.getItem(dynamoDbHashKey, uuid.toString());
@@ -325,7 +344,9 @@ public class PlayerController {
     ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
 
         dynamoDBMapper.delete(playerItem);
-        jedis.del(playerItem.getUserUuid());
+        try (Jedis jedis = jedisPool.getResource()) {
+            jedis.del(playerItem.getUserUuid());
+        }
 
         return ResponseEntity.noContent().build();
     }
@@ -336,7 +357,9 @@ public class PlayerController {
 
         for (Item item : items) {
             JSONObject jsonItem = new JSONObject(item.toJSON());
-            jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, jsonItem.getString(dynamoDbHashKey)), 1));
+            try (Jedis jedis = jedisPool.getResource()) {
+                jsonItem.put("rank", Long.sum(jedis.zrevrank(redisTableKey, jsonItem.getString(dynamoDbHashKey)), 1));
+            }
             players.add(objectMapper.readValue(jsonItem.toString(), Player.class));
         }
 
@@ -365,6 +388,47 @@ public class PlayerController {
         } catch (Exception e) {
             // There are no API specific errors to handle for Query, common DynamoDB API errors are handled below
             handleCommonErrors(e);
+        }
+    }
+
+    private JedisPoolConfig buildPoolConfig() {
+        final JedisPoolConfig poolConfig = new JedisPoolConfig();
+        poolConfig.setMaxTotal(128);
+        poolConfig.setMaxIdle(128);
+        poolConfig.setMinIdle(16);
+        poolConfig.setTestOnBorrow(true);
+        poolConfig.setTestOnReturn(true);
+        poolConfig.setTestWhileIdle(true);
+        poolConfig.setMinEvictableIdleTimeMillis(Duration.ofSeconds(60).toMillis());
+        poolConfig.setTimeBetweenEvictionRunsMillis(Duration.ofSeconds(30).toMillis());
+        poolConfig.setNumTestsPerEvictionRun(3);
+        poolConfig.setBlockWhenExhausted(true);
+        return poolConfig;
+    }
+
+    private void warpUpJedisPool(){
+
+        List<Jedis> minIdleJedisList = new ArrayList<Jedis>(jedisPoolConfig.getMinIdle());
+
+        for (int i = 0; i < jedisPoolConfig.getMinIdle(); i++) {
+            Jedis jedis = null;
+            try {
+                jedis = jedisPool.getResource();
+                minIdleJedisList.add(jedis);
+                jedis.ping();
+            } catch (Exception e) {
+                //log.error(e.getMessage(), e);
+            }
+        }
+
+        for (int i = 0; i < jedisPoolConfig.getMinIdle(); i++) {
+            Jedis jedis = null;
+            try {
+                jedis = minIdleJedisList.get(i);
+                jedis.close();
+            } catch (Exception e) {
+                //logger.error(e.getMessage(), e);
+            }
         }
     }
 
