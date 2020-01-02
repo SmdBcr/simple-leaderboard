@@ -14,7 +14,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 **Notes**
 
-1. Global Leaderboard - GET /leaderboard/{page}
+1. Global Leaderboard - GET /leaderboard/page/{page}
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/{page}
   * {page} --> {1, 2, 3, 4, 5 ... N} for pagination
   * Each page has 20 players
@@ -92,7 +92,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 ---
 
-10. Edit User - DELETE /user/profile
+10. Delete User - DELETE /user/profile
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/user/profile
   * **example request json** 
 
