@@ -33,7 +33,10 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 @RestController
 public class PlayerController {
@@ -56,7 +59,7 @@ public class PlayerController {
     @Value("${dynamodb.gsi.name}")
     private String dynamoDbGsiName;
 
-    @Value("leaderboard.country.default.size")
+    @Value("${leaderboard.country.default.size}")
     private int countryLeaderboardDefSize;
 
     PlayerController(@Value("${spring.redis.host}") String redisHost,
@@ -107,8 +110,8 @@ public class PlayerController {
      * @return List of players in the current page of country specific leaderboard
      * @see <a href="https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes">Country iso codes</a>
      */
-    @GetMapping(value = {"/leaderboard/{countryCode}", "/leaderboard/{countryCode}/{size}"})
-    List<Player> getCountryLeaderboard(@PathVariable String countryCode, @PathVariable Optional<Integer> size) {
+    @GetMapping("/leaderboard/{countryCode}")
+    List<Player> getCountryLeaderboard(@PathVariable String countryCode) {
 
         logger.debug("GET /leaderboard/{countryCode} request with " + countryCode);
 
@@ -119,13 +122,37 @@ public class PlayerController {
         ArrayList<Player> players = new ArrayList<>();
 
         try {
-            ItemCollection<QueryOutcome> items;
-            if (size.isPresent()) {
-                items = getCountryItemCollectionFromDynamoDb(countryCode, size.get());
-            } else {
-                items = getCountryItemCollectionFromDynamoDb(countryCode, countryLeaderboardDefSize);
-            }
+            ItemCollection<QueryOutcome> items = getCountryItemCollectionFromDynamoDb(countryCode, countryLeaderboardDefSize);
+            players = getCountryPlayerList(items);
 
+            // Handle query errors
+        } catch (Exception e) {
+            handleQueryErrors(e);
+        }
+
+        return players;
+    }
+
+    /**
+     * @param countryCode country-iso-code for country specific leaderboard
+     * @param size max size for response of country specific leaderboard
+     * @return List of players in the current page of country specific leaderboard
+     * @see <a href="https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes">Country iso codes</a>
+     */
+    @GetMapping("/leaderboard/{countryCode}/{size}")
+    List<Player> getCountryLeaderboard(@PathVariable String countryCode, int size) {
+
+        logger.debug("GET /leaderboard/{countryCode} request with " + countryCode);
+
+        if (countryCode == null || countryCode.length() == 0 || size <= 0) {
+            throw new IllegalArgumentException("Invalid Country Code or size");
+        }
+
+        ArrayList<Player> players = new ArrayList<>();
+
+        try {
+
+            ItemCollection<QueryOutcome> items = getCountryItemCollectionFromDynamoDb(countryCode, size);
             players = getCountryPlayerList(items);
 
             // Handle query errors
