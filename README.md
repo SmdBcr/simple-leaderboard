@@ -118,3 +118,5 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 |  50 * 20   | 350 |  349   | 491 | 556 |       56         | TR 100 players|
 |  100 * 20  | 685 |  704   | 500 | 1417|       91         | TR 100 players|
 
+- 50*20 -->  50 Threads, each sends 20 requests
+- 100*20 --> 100 Threads, each sends 20 requests
