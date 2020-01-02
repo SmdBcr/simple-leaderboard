@@ -140,9 +140,9 @@ public class PlayerController {
      * @see <a href="https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes">Country iso codes</a>
      */
     @GetMapping("/leaderboard/{countryCode}/{size}")
-    List<Player> getCountryLeaderboard(@PathVariable String countryCode, int size) {
+    List<Player> getCountryLeaderboard(@PathVariable String countryCode, @PathVariable int size) {
 
-        logger.debug("GET /leaderboard/{countryCode} request with " + countryCode);
+        logger.debug("GET /leaderboard/{countryCode}/{size} request with " + countryCode + " of size " + size);
 
         if (countryCode == null || countryCode.length() == 0 || size <= 0) {
             throw new IllegalArgumentException("Invalid Country Code or size");
