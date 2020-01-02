@@ -1,6 +1,14 @@
 # simple-leaderboard
 A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS.
 
+  ***Application is deployed on Elastic Beanstalk***
+  
+  ***Global Leaderboard is kept on Redis as a sorted set (uuid, points)***
+
+  ***Player attributes such as country and name are kept on DynamoDB***
+
+  ***For country specific leaderbaords, global secondary index is used (pk=country, sk=points)***
+
 ![](https://github.com/SmdBcr/simple-leaderboard/workflows/.github/workflows/maven.yml/badge.svg)
 
 
