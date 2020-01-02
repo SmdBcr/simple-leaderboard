@@ -23,6 +23,8 @@ import com.gjg.leaderboard.request.PlayerCreationRequestBody;
 import com.gjg.leaderboard.request.PlayerCreationWithScoreRequestBody;
 import com.gjg.leaderboard.request.ScoreSubmissionRequestBody;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -46,6 +48,7 @@ public class PlayerController {
     Table leaderboardTable;
     DynamoDBMapper dynamoDBMapper;
     private JedisPool jedisPool;
+    private static final Logger logger = LoggerFactory.getLogger(PlayerController.class);
 
     @Value("${redis.table.key}")
     private String redisTableKey;
@@ -79,6 +82,8 @@ public class PlayerController {
     @GetMapping("/leaderboard/page/{pageNum}")
     List<Player> getGlobalLeaderboard(@PathVariable int pageNum) {
 
+        logger.debug("GET /leaderboard/page/{pageNum} request with " + pageNum);
+
         if (pageNum <= 0) throw new IllegalArgumentException("Invalid page number.");
 
         Set<String> pageUUIDs;
@@ -105,6 +110,8 @@ public class PlayerController {
     @GetMapping("/leaderboard/{countryCode}")
     List<Player> getCountryLeaderboard(@PathVariable String countryCode) {
 
+        logger.debug("GET /leaderboard/{countryCode} request with " + countryCode);
+
         if (countryCode == null || countryCode.length() == 0) {
             throw new IllegalArgumentException("Invalid Country Code");
         }
@@ -129,6 +136,8 @@ public class PlayerController {
     @GetMapping("/leaderboard/top10")
     List<Player> getLeaderboardTop10() {
 
+        logger.debug("GET leaderboard/top10 request ");
+
         Set<String> top10UUIDs;
 
         try (Jedis jedis = jedisPool.getResource()) {
@@ -152,6 +161,8 @@ public class PlayerController {
      */
     @GetMapping("/user/profile")
     Player getPlayer(@RequestBody PlayerItem playerItem) {
+
+        logger.debug("GET /user/profile request with body " + playerItem);
 
         UUID uuid = UUID.fromString(playerItem.getUserUuid());
 
@@ -182,6 +193,8 @@ public class PlayerController {
     @PutMapping("/user/profile")
     PlayerItem editPlayer(@RequestBody PlayerItem updatedPlayerItem) {
 
+        logger.debug("PUT /user/profile request with body " + updatedPlayerItem);
+
         PlayerItem playerItem = dynamoDBMapper.load(PlayerItem.class, updatedPlayerItem.getUserUuid());
         playerItem.setDisplayName(updatedPlayerItem.getDisplayName());
         playerItem.setCountry(updatedPlayerItem.getCountry());
@@ -197,6 +210,9 @@ public class PlayerController {
      */
     @PostMapping("/user/create")
     PlayerItem createPlayer(@RequestBody PlayerCreationRequestBody playerCreationRequestBody) {
+
+        logger.debug("POST /user/profile request with body " + playerCreationRequestBody);
+
         PlayerItem playerItem = new PlayerItem(playerCreationRequestBody.getDisplayName(), playerCreationRequestBody.getCountry());
         dynamoDBMapper.save(playerItem);
         try(Jedis jedis = jedisPool.getResource()){
@@ -212,6 +228,9 @@ public class PlayerController {
      */
     @PostMapping("/user/create/score")
     ResponseEntity<?> createPlayerWithScore(@RequestBody PlayerCreationWithScoreRequestBody requestBody) {
+
+        logger.debug("POST /user/create/score request with body " + requestBody);
+
         PlayerItem playerItem = new PlayerItem(requestBody.getDisplayName(), requestBody.getCountry(), requestBody.getPoints());
         dynamoDBMapper.save(playerItem);
         try(Jedis jedis = jedisPool.getResource()){
@@ -226,6 +245,8 @@ public class PlayerController {
      */
     @PostMapping("/score/submit")
     ScoreSubmissionRequestBody submitScore(@RequestBody ScoreSubmissionRequestBody scoreSubmissionRequestBody) throws IllegalArgumentException {
+
+        logger.debug("POST /score/submit request with body " + scoreSubmissionRequestBody);
 
         try (Jedis jedis = jedisPool.getResource()) {
 
@@ -267,6 +288,8 @@ public class PlayerController {
      */
     @DeleteMapping("/user/profile")
     ResponseEntity<?> deletePlayer(@RequestBody PlayerItem playerItem) {
+
+        logger.debug("DELETE /user/profile request with body " + playerItem);
 
         dynamoDBMapper.delete(playerItem);
         try (Jedis jedis = jedisPool.getResource()) {
