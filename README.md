@@ -8,7 +8,8 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 1. Global Leaderboard - GET /leaderboard/{page}
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/{page}
-* {page} --> {1, 2, 3, 4, 5 ... N} for pagination
+  * {page} --> {1, 2, 3, 4, 5 ... N} for pagination
+  * Each page has 20 players
   
 ---
 
@@ -17,12 +18,17 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
   
 ---
 
-3. Country Specific Leaderboard - GET /leaderboard/{country_iso_code} 
+3.  Country Specific Leaderboard - GET /leaderboard/{country_iso_code} 
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/tr
-   
+  * Returns top 100 players from the specifiec country leaderboard
 ---
 
-4. Score Submission - POST /score/submit 
+4.  Country Specific Leaderboard - GET /leaderboard/{country_iso_code}/{size}
+* http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/tr/200
+  * Returns top {size} players from the specifiec country leaderboard
+---
+
+5. Score Submission - POST /score/submit 
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/score/submit
   * **example request json** 
 
@@ -33,7 +39,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 ---
 
-5. Create New User - POST /user/create
+6. Create New User - POST /user/create
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/user/create
   * **example request json** 
 
@@ -44,7 +50,19 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 ---
 
-6. Retrieve User Profile - GET /user/profile/
+7. Create New User with a Score - POST /user/create/score
+* http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/user/create
+  * **example request json** 
+
+    {
+        "displayName" : "Sam",
+        "country" : "uk"
+        "points" : 34450
+    }
+
+---
+
+8. Retrieve User Profile - GET /user/profile/
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/user/profile
   * **example request json** 
 
@@ -54,7 +72,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 ---
 
-7. Edit User - PUT /user/profile
+9. Edit User - PUT /user/profile
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/user/profile
   * **example request json** 
 
@@ -66,7 +84,7 @@ A simple Spring Application for game leaderboard using Redis and DynomoDB on AWS
 
 ---
 
-8. Edit User - DELETE /user/profile
+10. Edit User - DELETE /user/profile
 * http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/leaderboard/user/profile
   * **example request json** 
 
