@@ -10,6 +10,9 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.net.URL;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Random;
 
 public class RandomPlayerCreationRequests {
@@ -18,11 +21,17 @@ public class RandomPlayerCreationRequests {
 
         Faker faker = new Faker();
         Random random = new Random();
+        DateFormat dateFormat = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS Z");
 
         try {
             URL url = new URL("http://gjg-leaderboard.eu-central-1.elasticbeanstalk.com/user/create/score");
 
-            for (int i = 0; i < 1000; i++) {
+            int requestNumber = 10000;
+
+            Date start = new Date();
+            System.out.println("Request Number = " + requestNumber + " Start Time: " +  dateFormat.format(start));
+
+            for (int i = 1; i < requestNumber + 1; i++) {
 
                 String requestBody = randomPlayerJsonBody(random, faker);
 
@@ -32,6 +41,9 @@ public class RandomPlayerCreationRequests {
 
             }
 
+            Date end = new Date();
+            System.out.println("End Time: " +  dateFormat.format(end));
+            System.out.println("Duration(ms): " + Math.abs(end.getTime() - start.getTime()));
 
         } catch (
                 IOException e) {

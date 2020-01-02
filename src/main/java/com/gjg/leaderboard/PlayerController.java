@@ -33,10 +33,7 @@ import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @RestController
 public class PlayerController {
@@ -58,6 +55,9 @@ public class PlayerController {
 
     @Value("${dynamodb.gsi.name}")
     private String dynamoDbGsiName;
+
+    @Value("leaderboard.country.default.size")
+    private int countryLeaderboardDefSize;
 
     PlayerController(@Value("${spring.redis.host}") String redisHost,
                      @Value("${dynamodb.table.name}") String dynamoDbTableName,
@@ -88,7 +88,7 @@ public class PlayerController {
 
         Set<String> pageUUIDs;
 
-        try(Jedis jedis = jedisPool.getResource()){
+        try (Jedis jedis = jedisPool.getResource()) {
             pageUUIDs = jedis.zrevrange(redisTableKey, (pageNum - 1) * 20, pageNum * 20 - 1);
         }
 
@@ -107,8 +107,8 @@ public class PlayerController {
      * @return List of players in the current page of country specific leaderboard
      * @see <a href="https://en.wikipedia.org/wiki/List_of_ISO_3166_country_codes">Country iso codes</a>
      */
-    @GetMapping("/leaderboard/{countryCode}")
-    List<Player> getCountryLeaderboard(@PathVariable String countryCode) {
+    @GetMapping(value = {"/leaderboard/{countryCode}", "/leaderboard/{countryCode}/{size}"})
+    List<Player> getCountryLeaderboard(@PathVariable String countryCode, @PathVariable Optional<Integer> size) {
 
         logger.debug("GET /leaderboard/{countryCode} request with " + countryCode);
 
@@ -119,7 +119,13 @@ public class PlayerController {
         ArrayList<Player> players = new ArrayList<>();
 
         try {
-            ItemCollection<QueryOutcome> items = getCountryItemCollectionFromDynamoDb(countryCode);
+            ItemCollection<QueryOutcome> items;
+            if (size.isPresent()) {
+                items = getCountryItemCollectionFromDynamoDb(countryCode, size.get());
+            } else {
+                items = getCountryItemCollectionFromDynamoDb(countryCode, countryLeaderboardDefSize);
+            }
+
             players = getCountryPlayerList(items);
 
             // Handle query errors
@@ -156,6 +162,7 @@ public class PlayerController {
 
     /**
      * Retrieve Existing Player
+     *
      * @param playerItem UUID of the player
      * @return Player
      */
@@ -187,6 +194,7 @@ public class PlayerController {
 
     /**
      * Edit existing player info
+     *
      * @param updatedPlayerItem
      * @return PlayerItem
      */
@@ -205,6 +213,7 @@ public class PlayerController {
 
     /**
      * New Player Creation
+     *
      * @param playerCreationRequestBody
      * @return PlayerItem
      */
@@ -215,7 +224,7 @@ public class PlayerController {
 
         PlayerItem playerItem = new PlayerItem(playerCreationRequestBody.getDisplayName(), playerCreationRequestBody.getCountry());
         dynamoDBMapper.save(playerItem);
-        try(Jedis jedis = jedisPool.getResource()){
+        try (Jedis jedis = jedisPool.getResource()) {
             jedis.zadd(redisTableKey, 0, playerItem.getUserUuid());
         }
         return dynamoDBMapper.load(PlayerItem.class, playerItem.getUserUuid());
@@ -223,6 +232,7 @@ public class PlayerController {
 
     /**
      * New Player Creation with scores
+     *
      * @param requestBody
      * @return PlayerItem
      */
@@ -233,7 +243,7 @@ public class PlayerController {
 
         PlayerItem playerItem = new PlayerItem(requestBody.getDisplayName(), requestBody.getCountry(), requestBody.getPoints());
         dynamoDBMapper.save(playerItem);
-        try(Jedis jedis = jedisPool.getResource()){
+        try (Jedis jedis = jedisPool.getResource()) {
             jedis.zadd(redisTableKey, playerItem.getPoints(), playerItem.getUserUuid());
         }
         return ResponseEntity.accepted().build();
@@ -241,6 +251,7 @@ public class PlayerController {
 
     /**
      * Score Submission
+     *
      * @param scoreSubmissionRequestBody a json object with UUID and double parameter
      */
     @PostMapping("/score/submit")
@@ -264,7 +275,7 @@ public class PlayerController {
                     return scoreSubmissionRequestBody;
 
                 } else throw new IllegalArgumentException("Current score is already higher.");
-            }else {
+            } else {
                 UpdateItemSpec updateItemSpec = getUpdateItemScoreSpec(uuid, scoreWorth);
                 leaderboardTable.updateItem(updateItemSpec);
                 jedis.zadd(redisTableKey, scoreWorth, uuid);
@@ -283,6 +294,7 @@ public class PlayerController {
 
     /**
      * Delete existing player
+     *
      * @param playerItem
      * @return NoContent ResponseEntity
      */
@@ -301,6 +313,7 @@ public class PlayerController {
 
     /**
      * Return player corresponding to uuid
+     *
      * @param uuidString String form of UUID of the player
      * @return Player
      */
@@ -351,12 +364,12 @@ public class PlayerController {
         return players;
     }
 
-    private ItemCollection<QueryOutcome> getCountryItemCollectionFromDynamoDb(String countryCode) {
+    private ItemCollection<QueryOutcome> getCountryItemCollectionFromDynamoDb(String countryCode, int resultSize) {
 
         Index index = leaderboardTable.getIndex(dynamoDbGsiName);
 
         QuerySpec querySpec = new QuerySpec()
-                .withMaxPageSize(100)
+                .withMaxResultSize(resultSize)
                 .withKeyConditionExpression("country = :countryCode")
                 .withScanIndexForward(false)
                 .withValueMap(new ValueMap()
@@ -417,7 +430,7 @@ public class PlayerController {
         return poolConfig;
     }
 
-    private void warpUpJedisPool(){
+    private void warpUpJedisPool() {
 
         List<Jedis> minIdleJedisList = new ArrayList<Jedis>(jedisPoolConfig.getMinIdle());
 
